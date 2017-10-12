@@ -1,0 +1,5 @@
+A keyboard layout optimizer based on a simple integer programming approach.
+
+The optimization is solely based on weights assigned to each position on the
+keyboard an given frequencies of the letters to be assigned.
+This does not (yet) support bigram or trigram frequencies.
