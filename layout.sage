@@ -1,18 +1,70 @@
 from random import randint
-letters = "qwertyuiopasdfghjklzxcvbnm,." # TODO read as input / from config
-weights = [[11, 5, 3, 2, 7, 7, 2, 3, 5, 11],
-           [3, 1, 1, 1, 2.5, 2.5, 1, 1, 1, 3],
-           [10, 6, 3, 1.5, 8, 8, 1.5, 3, 6, 10]]
+letters = "qwertyuiopasdfghjklzxcvbnm,./;" # TODO read as input / from config
+weights = [[3.5, 2.4, 2.0, 2.2, 3.5, 3.5, 2.2, 2.0, 2.4, 3.5],
+           [1.5, 1.2, 1.0, 1.0, 2.9, 2.9, 1.0, 1.0, 1.2, 1.5],
+           [3.5, 2.8, 2.5, 1.7, 2.6, 2.6, 1.7, 2.5, 2.8, 3.5]]
+fingers = [[0, 1, 2, 3, 3, 6, 6, 7, 8, 9],
+           [0, 1, 2, 3, 3, 6, 6, 7, 8, 9],
+           [0, 1, 2, 3, 3, 6, 6, 7, 8, 9]]
+
+def map_char(c):
+    if c == "?":
+        c = "/"
+    elif c == ":":
+        c == ";"
+    else:
+        c = c.lower()
+    return c
 
 def analyze_frequencies():
+    _letters = set(letters)
     frequencies = {}
+    bigram = ""
+    trigram = ""
     for c in sys.stdin.read():
-        if c in letters:
+        c = map_char(c)
+        if len(bigram) == 0:
+            bigram = c
+        elif len(bigram) == 1:
+            bigram += c
+        else:
+            bigram = bigram[1:] + c
+
+        #trigram = trigram[1:] + c
+        if c in _letters:
             frequencies[c] = frequencies.get(c, 0) + 1
+            if len(bigram) == 2 and bigram[0] in _letters:
+                assert  bigram[1] in _letters
+                frequencies[bigram] = frequencies.get(bigram, 0) + 1
+        #if set(trigram).issubset(_letters):
+        #    frequencies[trigram] = frequencies.get(trigram, 0) + 1
 
     for l in letters:
         if l not in frequencies:
             frequencies[l] = 0
+
+    # initialize to float 0.0
+    total = 0
+    bigram_total = 0
+    for l,f in frequencies.items():
+        if len(l) == 1:
+            total += f
+        elif len(l) == 2:
+            bigram_total += f
+        else:
+            pass
+
+    for (i,l) in enumerate(letters):
+        frequencies[l] = frequencies[l] / float(total)
+        for m in letters[i:]:
+            freq = (frequencies.get(l + m, 0) + frequencies.get(m + l, 0)) / float(bigram_total)
+            if m + l in frequencies:
+                del frequencies[m + l]
+            #if freq < 0.01:
+            #    if l + m in frequencies:
+            #        del frequencies[l + m]
+            else:
+                frequencies[l + m] = freq
 
     return frequencies
 
@@ -21,7 +73,7 @@ def print_instance(letters, weights, frequencies):
     for l in weights:
         print(l)
     print("frequencies:")
-    for l in letters:
+    for l in frequencies:
         print("{} {}".format(l, frequencies[l]))
 
 
@@ -30,21 +82,51 @@ def main():
     print_instance(letters, weights, frequencies)
     p = MixedIntegerLinearProgram()
     v = p.new_variable(binary=True)
-    for l in letters:
-        p.add_constraint(sum([v[l,i,j] for i in range(len(weights)) for j in range(len(weights[i]))]) == 1)
+    print(len(frequencies))
 
-    for i in range(len(weights)):
-        for j in range(len(weights[i])):
+    matrix_indices = [(i,j) for i in range(len(weights)) for j in range(len(weights[i]))]
+    # every letter needs a key
+    for l in letters:
+        p.add_constraint(sum([v[l,i,j] for (i,j) in matrix_indices]) == 1)
+
+    # every key can have at most one lettter
+    for (i,j) in matrix_indices:
             p.add_constraint(sum(v[l,i,j] for l in letters) <= 1)
 
     objective = []
     for l in letters:
-        for i in range(len(weights)):
-            for j in range(len(weights[i])):
-                objective.append(v[l,i,j] * (-frequencies[l]) * weights[i][j])
+        for (i,j) in matrix_indices:
+            objective.append(v[l,i,j] * (-frequencies[l]) * weights[i][j])
+
+    fingers = set([0, 1, 2, 3, 6, 7, 8, 9])
+    finger_index = [[0, 1, 2, 3, 3, 6, 6, 7, 8, 9],
+        [0, 1, 2, 3, 3, 6, 6, 7, 8, 9],
+        [0, 1, 2, 3, 3, 6, 6, 7, 8, 9]]
+
+    bigram_penalty = 3.5
+
+    finger_map = {f: [] for f in fingers}
+    for (i,j) in matrix_indices:
+        finger = finger_index[i][j]
+        finger_map[finger].append((i,j))
+
+    w = p.new_variable(binary=True)
+    for s in frequencies:
+        if len(s) != 2:
+            continue
+        a, b = s
+        for finger in fingers:
+            constraint = [-w[s,finger]]
+            for i,j in finger_map[finger]:
+                constraint.append(v[a,i,j])
+                constraint.append(v[b,i,j])
+            p.add_constraint(sum(constraint) <= 1)
+
+            objective.append(bigram_penalty * (-frequencies[s]) * w[s,finger])
+
 
     p.set_objective(sum(objective))
-    p.solve()
+    print(p.solve())
     solution = p.get_values(v)
     layout = [[None for j in range(len(weights[i]))] for i in range(len(weights))]
 
@@ -54,6 +136,17 @@ def main():
 
     for l in layout:
         print(l)
+
+    w_sol = p.get_values(w)
+    for finger in fingers:
+        print("finger {}: {}".format(finger, sum(frequencies[l] * solution[l, i, j] for l in letters for i,j in finger_map[finger])))
+        print("penalty {}: {}".format(finger, sum(frequencies[l] * weights[i][j] * solution[l, i, j] for l in letters for i,j in finger_map[finger])))
+        total = 0
+        for i, l in enumerate(letters):
+            for m in letters[i:]:
+                if l + m in frequencies:
+                    total += frequencies[l + m] * w_sol[l + m, finger]
+        print("bigrams {}: {}".format(finger, total))
 
 if __name__ == "__main__":
     main()
