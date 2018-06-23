@@ -3,9 +3,9 @@ from pyomo.environ import *
 from pyomo.opt import SolverFactory
 
 letters = "qwertyuiopasdfghjklzxcvbnm,./;" # TODO read as input / from config
-weights = [[3.5, 2.4, 2.0, 2.2, 3.5, 3.5, 2.2, 2.0, 2.4, 3.5],
+weights = [[3.5, 2.4, 2.0, 2.2, 3.4, 3.4, 2.2, 2.0, 2.4, 3.5],
            [1.5, 1.2, 1.0, 1.0, 2.9, 2.9, 1.0, 1.0, 1.2, 1.5],
-           [3.5, 2.8, 2.5, 1.7, 2.6, 2.6, 1.7, 2.5, 2.8, 3.5]]
+           [3.3, 2.6, 2.4, 1.7, 3.1, 3.1, 1.7, 2.4, 2.6, 3.3]]
 fingers = set([0, 1, 2, 3, 6, 7, 8, 9])
 finger_index = [[0, 1, 2, 3, 3, 6, 6, 7, 8, 9],
            [0, 1, 2, 3, 3, 6, 6, 7, 8, 9],
@@ -32,28 +32,29 @@ def map_char(c):
 def optimize_frequencies(frequencies):
     pass
 
-def analyze_frequencies():
+def analyze_frequencies(f):
     _letters = set(letters)
     frequencies = {}
     bigram = ""
     total = 0
     bigram_total = 0
-    for c in sys.stdin.read():
-        c = map_char(c)
-        if len(bigram) == 0:
-            bigram = c
-        elif len(bigram) == 1:
-            bigram += c
-        else:
-            bigram = bigram[1:] + c
+    for line in f:
+        for c in line:
+            c = map_char(c)
+            if len(bigram) == 0:
+                bigram = c
+            elif len(bigram) == 1:
+                bigram += c
+            else:
+                bigram = bigram[1:] + c
 
-        if c in _letters:
-            frequencies[c] = frequencies.get(c, 0) + 1
-            total += 1
-            if len(bigram) == 2 and bigram[0] in _letters:
-                assert  bigram[1] in _letters
-                frequencies[bigram] = frequencies.get(bigram, 0) + 1
-                bigram_total += 1
+            if c in _letters:
+                frequencies[c] = frequencies.get(c, 0) + 1
+                total += 1
+                if len(bigram) == 2 and bigram[0] in _letters:
+                    assert  bigram[1] in _letters
+                    frequencies[bigram] = frequencies.get(bigram, 0) + 1
+                    bigram_total += 1
     assert total > 0
     assert bigram_total > 0
 
@@ -117,12 +118,12 @@ def create_instance(frequencies):
     p.objective = Objective(rule=objective_rule)
     return p
 
-def calculate_objective_value(layout):
-    instance = create_instance()
+def calculate_objective_value(frequencies, layout):
+    instance = create_instance(frequencies)
 
     def fix_layout_rule(model, i, j):
-        return v[layout[i][j], (i, j)] == 1
-    instance.fix_layout = Constraint(instance.letters, instance.matrix_indices, rule=fix_layout_rule)
+        return model.v[layout[i][j], (i, j)] == 1
+    instance.fix_layout = Constraint(instance.matrix_indices, rule=fix_layout_rule)
     return instance
 
 # FIXME layout
@@ -130,27 +131,34 @@ LAYOUT = [['q', 'w', 'f', 'p', 'b', 'j', 'l', 'u', 'y', ';'],
     ['a', 'r', 's', 't', 'g', 'k', 'n', 'e', 'i', 'o'],
     ['z', 'x', 'c', 'd', 'v', 'm', 'h', ',', '.', '/']]
 def main():
-    opt = SolverFactory('cbc')
-    frequencies = analyze_frequencies()
-    # TODO logging
-    print_instance(letters, weights, frequencies)
+    # FIXME find a good way to handle this gracefully...
+    encoding = 'latin-1'
+    with open(0, encoding=encoding) as f:
+        # default mode is to optimize
+        frequencies = analyze_frequencies(f)
+        # TODO logging
+        print_instance(letters, weights, frequencies)
 
-    # TODO different behaviour if layout is given
-    instance = create_instance(frequencies)
-    # instance = p.create_instance()
-    results = opt.solve(instance)
+        # TODO different behaviour if layout is given
+        #instance = create_instance(frequencies)
+        instance = calculate_objective_value(frequencies, LAYOUT)
 
-    layout = [[None for j in range(len(weights[i]))] for i in range(len(weights))]
+        opt = SolverFactory('cbc')
+        results = opt.solve(instance)
+        print(results)
 
-    for l in instance.letters:
-        for i,j in instance.matrix_indices:
-            if instance.v[l, (i,j)]:
-                layout[i][j] = l
+        layout = [[None for j in range(len(weights[i]))] for i in range(len(weights))]
 
-    for l in layout:
-        print(l)
-    # FIXME
-    return
+        for l in instance.letters:
+            for i,j in instance.matrix_indices:
+                if instance.v[l, (i,j)]:
+                    layout[i][j] = l
+
+        for l in layout:
+            print(l)
+
+        # FIXME
+        return
 
 if __name__ == "__main__":
     main()
