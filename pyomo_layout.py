@@ -98,9 +98,14 @@ def _get_bigram_indices(finger_1, finger_2, bigrams):
 
 def _add_bigram_penalty(instance, finger_1, finger_2, bigrams, penalties, frequencies):
     finger_map = create_finger_map(finger_index)
-    # calculate index set
+    penalty_index = _get_bigram_indices(finger_1, finger_2, bigrams)
     index_name = "penalty_indices_{}_{}".format(finger_1, finger_2)
+    # FIXME why can penalty index _not_ be a pyomo Set()?
+    setattr(instance, index_name, penalty_index)
+
     var_name = "penalty_vars_{}_{}".format(finger_1, finger_2)
+    setattr(instance, var_name, Var(penalty_index, domain=Binary))
+    # calculate index set
     constraint_name = "penalty_constraint_{}_{}".format(finger_1, finger_2)
 
     var = getattr(instance, var_name)
@@ -129,17 +134,10 @@ def add_bigram_penalties(instance, frequencies):
     bigrams = set(filter(lambda x: len(x) == 2 and x[0] != x[1], frequencies))
     instance.bigrams = bigrams
     for finger in fingers:
-        penalty_index = _get_bigram_indices(finger, finger, bigrams)
-        index_name = "penalty_indices_{}_{}".format(finger, finger)
-        # FIXME why can penalty index _not_ be a pyomo Set()?
-        setattr(instance, index_name, penalty_index)
-
-        var_name = "penalty_vars_{}_{}".format(finger, finger)
-        setattr(instance, var_name, Var(penalty_index, domain=Binary))
-
         objective.extend(
                 _add_bigram_penalty(instance, finger, finger, bigrams, same_finger_penalties, frequencies)
                 )
+
     # returns part of objective
     return objective
 
