@@ -18,7 +18,7 @@ ring_right = 8
 middle_left = 2
 middle_right = 7
 
-same_finger_penalties = {0: 1, 1: 0, 2: 0}
+same_finger_penalties = {0: 2.5, 1: 2.5, 2: 3.5}
 pinky_ring_penalties = {0: 0.5, 1: 1.0, 2: 1.5}
 ring_middle_penalties = {0: 0.1, 1: 0.2, 2: 0.3}
 
@@ -137,6 +137,20 @@ def add_bigram_penalties(instance, frequencies):
         objective.extend(
                 _add_bigram_penalty(instance, finger, finger, bigrams, same_finger_penalties, frequencies)
                 )
+
+    objective.extend(
+            _add_bigram_penalty(instance, pinky_left, ring_left, bigrams, pinky_ring_penalties, frequencies)
+            )
+    objective.extend(
+            _add_bigram_penalty(instance, pinky_right, ring_right, bigrams, pinky_ring_penalties, frequencies)
+            )
+
+    objective.extend(
+            _add_bigram_penalty(instance, ring_left, middle_left, bigrams, ring_middle_penalties, frequencies)
+            )
+    objective.extend(
+            _add_bigram_penalty(instance, ring_right, middle_right, bigrams, ring_middle_penalties, frequencies)
+            )
 
     # returns part of objective
     return objective
