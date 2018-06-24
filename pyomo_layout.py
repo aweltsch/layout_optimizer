@@ -125,7 +125,9 @@ def create_finger_map(finger_index):
 
 def add_bigram_penalties(instance, frequencies):
     objective = []
-    bigrams = set(filter(lambda x: len(x) == 2, frequencies))
+    # only bigrams with 2 different symbols, the others are irrelevant
+    bigrams = set(filter(lambda x: len(x) == 2 and x[0] != x[1], frequencies))
+    instance.bigrams = bigrams
     for finger in fingers:
         penalty_index = _get_bigram_indices(finger, finger, bigrams)
         index_name = "penalty_indices_{}_{}".format(finger, finger)
@@ -181,6 +183,27 @@ def calculate_objective_value(frequencies, layout):
         return model.v[layout[i][j], (i, j)] == 1
     instance.fix_layout = Constraint(instance.matrix_indices, rule=fix_layout_rule)
     return instance
+
+def verify_results(instance, layout):
+    """Check if bigram penalty variables are correctly set."""
+    indices = list(instance.matrix_indices)
+    for finger_1 in fingers:
+        for finger_2 in fingers:
+            var_name = "penalty_vars_{}_{}".format(finger_1, finger_2)
+            if hasattr(instance, var_name):
+                print("fingers:", finger_1, finger_2)
+                vars = getattr(instance, var_name)
+                for i_1, j_1 in indices:
+                    for i_2, j_2 in indices:
+                        for bigram in instance.bigrams:
+                            try:
+                                x = vars[i_1, j_1, i_2, j_2, bigram]
+                                if x:
+                                    print(i_1, j_1, i_2, j_2, bigram)
+                            except:
+                                pass
+
+
 
 # FIXME layout
 LAYOUT = [['q', 'w', 'f', 'p', 'b', 'j', 'l', 'u', 'y', ';'],
