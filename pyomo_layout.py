@@ -18,7 +18,7 @@ ring_right = 8
 middle_left = 2
 middle_right = 7
 
-same_finger_penalties = {0: 2.5, 1: 2.5, 2: 3.5}
+same_finger_penalties = {0: 1, 1: 0, 2: 0}
 pinky_ring_penalties = {0: 0.5, 1: 1.0, 2: 1.5}
 ring_middle_penalties = {0: 0.1, 1: 0.2, 2: 0.3}
 
@@ -82,11 +82,64 @@ def print_instance(letters, weights, frequencies):
     for l in frequencies:
         print("{} {}".format(l, frequencies[l]))
 
-def _add_bigram_penalty():
-    pass
+def _get_bigram_indices(finger_1, finger_2, bigrams):
+    finger_map = create_finger_map(finger_index)
+    seen = set()
+    indices = []
+    for i_1, j_1 in finger_map[finger_1]:
+        seen.add((i_1, j_1))
+        for i_2, j_2 in finger_map[finger_2]:
+            if (i_2, j_2) in seen:
+                continue
+            for s in bigrams:
+                indices.append((i_1, j_1, i_2, j_2, s))
 
-def add_bigram_penalties():
-    pass
+    return indices
+
+def _add_bigram_penalty(instance, finger_1, finger_2, bigrams, penalties, frequencies):
+    finger_map = create_finger_map(finger_index)
+    # calculate index set
+    index_name = "penalty_indices_{}_{}".format(finger_1, finger_2)
+    var_name = "penalty_vars_{}_{}".format(finger_1, finger_2)
+    constraint_name = "penalty_constraint_{}_{}".format(finger_1, finger_2)
+
+    var = getattr(instance, var_name)
+    index = getattr(instance, index_name)
+
+    def penalty_rule(model, i_1, j_1, i_2, j_2, s):
+        s_1, s_2 = s
+        return model.v[s_1, (i_1, j_1)] + model.v[s_2, (i_1, j_1)] \
+                + model.v[s_1, (i_2, j_2)] + model.v[s_2, (i_2, j_2)] \
+                - var[(i_1,j_1), (i_2, j_2), s] <= 1
+    setattr(instance, constraint_name, Constraint(index, rule=penalty_rule))
+    # TODO
+    objective = [penalties[abs(i_1 - i_2)] * frequencies[s] * var[i_1, j_1, i_2, j_2, s] for (i_1, j_1, i_2, j_2, s) in index]
+    return objective
+
+def create_finger_map(finger_index):
+    finger_map = {finger: [] for finger in fingers}
+    for i, row in enumerate(finger_index):
+        for j, finger in enumerate(row):
+            finger_map[finger].append((i,j))
+    return finger_map
+
+def add_bigram_penalties(instance, frequencies):
+    objective = []
+    bigrams = set(filter(lambda x: len(x) == 2, frequencies))
+    for finger in fingers:
+        penalty_index = _get_bigram_indices(finger, finger, bigrams)
+        index_name = "penalty_indices_{}_{}".format(finger, finger)
+        # FIXME why can penalty index _not_ be a pyomo Set()?
+        setattr(instance, index_name, penalty_index)
+
+        var_name = "penalty_vars_{}_{}".format(finger, finger)
+        setattr(instance, var_name, Var(penalty_index, domain=Binary))
+
+        objective.extend(
+                _add_bigram_penalty(instance, finger, finger, bigrams, same_finger_penalties, frequencies)
+                )
+    # returns part of objective
+    return objective
 
 def create_instance(frequencies):
     matrix_indices = [(i,j) for i in range(len(weights)) for j in range(len(weights[i]))]
@@ -106,6 +159,9 @@ def create_instance(frequencies):
     def one_letter(model, i, j):
         return sum(model.v[l,(i,j)] for l in model.letters) <= 1
     p.one_letter = Constraint(p.matrix_indices, rule=one_letter)
+
+    #objective.extend(add_bigram_penalties(p, frequencies))
+    objective.extend(add_bigram_penalties(p, frequencies))
 
     # prepare objective
     for i,j in matrix_indices:
@@ -157,7 +213,6 @@ def main():
         for l in layout:
             print(l)
 
-        # FIXME
         return
 
 if __name__ == "__main__":
