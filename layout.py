@@ -1,4 +1,6 @@
+from __future__ import division
 import argparse
+import json
 import sys
 from enum import Enum
 from pyomo.environ import *
@@ -24,15 +26,14 @@ same_finger_penalties = {0: 2.5, 1: 2.5, 2: 3.5}
 pinky_ring_penalties = {0: 0.5, 1: 1.0, 2: 1.5}
 ring_middle_penalties = {0: 0.1, 1: 0.2, 2: 0.3}
 
-# TODO: incorporate this
 bigram_threshold = 1 # use only the major percentage of bigrams
 def map_char(c):
     c = c.lower()
     return c
 
 # TODO
-def optimize_frequencies(frequencies):
-    pass
+def optimize_frequencies(frequencies, bigram_threshold):
+    return frequencies
 
 def analyze_frequencies(f):
     _letters = set(letters)
@@ -75,6 +76,16 @@ def analyze_frequencies(f):
     for k, v in bigram_res.items():
         result[k] = v
     return result
+
+def read_layout(f_name):
+    layout = []
+
+    with open(f_name) as f:
+        for line in f:
+            line = line.strip()
+            layout.append(line.split())
+
+    return layout
 
 def print_instance(letters, weights, frequencies):
     print("weights:")
@@ -119,7 +130,7 @@ def _add_bigram_penalty(instance, finger_1, finger_2, bigrams, penalties, freque
                 + model.v[s_1, (i_2, j_2)] + model.v[s_2, (i_2, j_2)] \
                 - var[(i_1,j_1), (i_2, j_2), s] <= 1
     setattr(instance, constraint_name, Constraint(index, rule=penalty_rule))
-    # TODO
+
     objective = [penalties[abs(i_1 - i_2)] * frequencies[s] * var[i_1, j_1, i_2, j_2, s] for (i_1, j_1, i_2, j_2, s) in index]
     return objective
 
@@ -284,32 +295,40 @@ def init_argument_parser():
     parser.add_argument('--symbols', type=str, default=letters, help='Set of symbols to place in the layout')
 
     corpus_choice = parser.add_mutually_exclusive_group()
-    corpus_choice.add_argument('--frequency_file', type=str, default=None, help='File containing frequencies for letters and bigrams')
+    corpus_choice.add_argument('--frequency_file', type=str, default=None, help='File containing frequencies for letters and bigrams as JSON')
     corpus_choice.add_argument('--text_file', type=str, default=None, help='Text file for input corpus')
 
     return parser
 
-# FIXME layout
-LAYOUT = [['q', 'w', 'f', 'p', 'b', 'j', 'l', 'u', 'y', ';'],
-    ['a', 'r', 's', 't', 'g', 'k', 'n', 'e', 'i', 'o'],
-    ['z', 'x', 'c', 'd', 'v', 'm', 'h', ',', '.', '/']]
 def main():
     parser = init_argument_parser()
     args = parser.parse_args()
 
-    # FIXME find a good way to handle this gracefully...
+    f_name = None
+    if args.text_file is not None:
+        f_name = args.text_file
+    elif args.frequency_file is not None:
+        f_name = args.frequency_file
+    else:
+        f_name = '/dev/stdin' # FIXME is this a good idea? non linux definetely not
+
     encoding = args.input_encoding
-    with open(0, encoding=encoding) as f:
+    with open(f_name, encoding=encoding) as f:
         # default mode is to optimize
-        frequencies = analyze_frequencies(f)
-        # TODO logging
-        print_instance(letters, weights, frequencies)
+        if args.frequency_file:
+            frequencies = json.load(f)
+        else:
+            frequencies = analyze_frequencies(f)
 
-        # TODO different behaviour if layout is given
-        #instance = create_instance(frequencies)
-        instance = calculate_objective_value(frequencies, LAYOUT)
+        frequencies = optimize_frequencies(frequencies, args.bigram_threshold)
 
-        opt = SolverFactory('cbc')
+        if args.layout_file is not None:
+            layout = read_layout(args.layout_file)
+            instance = calculate_objective_value(frequencies, layout)
+        else:
+            instance = create_instance(frequencies)
+
+        opt = SolverFactory(args.solver)
         results = opt.solve(instance)
         print(results)
 
