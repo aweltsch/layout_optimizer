@@ -324,6 +324,7 @@ def main():
 
         if args.layout_file is not None:
             layout = read_layout(args.layout_file)
+            # TODO verify layout fits possible layout
             instance = calculate_objective_value(frequencies, layout)
         else:
             instance = create_instance(frequencies)
