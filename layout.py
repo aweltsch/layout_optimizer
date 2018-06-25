@@ -1,4 +1,5 @@
 import sys
+from enum import Enum
 from pyomo.environ import *
 from pyomo.opt import SolverFactory
 
@@ -214,7 +215,61 @@ def verify_results(instance, layout):
                                     print(i_1, j_1, i_2, j_2, bigram)
                             except:
                                 pass
+class ConfigReaderState(Enum):
+    START = 0
+    READ_EFFORT = 1
+    READ_PENALTIES = 2
+    READ_FINGERS = 3
+    COMPLETE = 4
 
+EFFORT_LINE = 'effort:'
+PENALTIES_LINE = 'penalties:'
+FINGERS_LINE = 'fingers:'
+TYPE_LINE = 'type:'
+REQUIRED_PENALTIES = 3
+
+def read_configuration_file(f_name):
+    state = ConfigReaderState.START
+    effort = None
+    penalties = None
+    fingers = None
+    n_rows = 0
+    max_cols = 0
+    n_penalties = 0
+
+    # implement as state machine
+    with open(f_name) as f:
+        for i, line in enumerate(f):
+            if line.find('#') > -1:
+                line = line[line.find('#')] # ignore comments in file
+            line = line.strip()
+
+            if state == ConfigReaderState.START:
+                if line == EFFORT_LINE:
+                    state = ConfigReaderState.READ_EFFORT
+                else:
+                    raise Exception('Configuration file incorrect expecting {} at line {}, see specified format for details.'.format(EFFORT_LINE, i))
+            elif state == ConfigReaderState.READ_EFFORT:
+                if line == PENALTIES_LINE:
+                    state = ConfigReaderState.READ_PENALTIES
+                else:
+                    pass
+            elif state == ConfigReaderState.READ_PENALTIES:
+                if line == FINGERS_LINE:
+                    state = ConfigReaderState.READ_FINGERS
+                else:
+                    pass
+            elif state == ConfigReaderState.READ_FINGERS:
+                if line == 'TYPE_LINE':
+                    state = ConfigReaderState.COMPLETE
+                else:
+                    pass
+            elif state == ConfigReaderState.COMPLETE:
+                break
+            else:
+                assert False, 'incorrect state, fatal error'
+
+    return effort, penalties, fingers
 
 
 # FIXME layout
