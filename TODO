@@ -1,0 +1,10 @@
+* Use configuration object to handle parameters
+* Read configuration
+* Read layout
+* Improve output to display the same properties as layout analyer
+* Include tests
+* Enable choice of solver
+* Enable bigram threshold to reduce variables in model
+* Enable usage of SOS-1 constraints
+* Use text-file or stdin
+* Documentation!
