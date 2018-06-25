@@ -1,3 +1,4 @@
+import argparse
 import sys
 from enum import Enum
 from pyomo.environ import *
@@ -271,14 +272,33 @@ def read_configuration_file(f_name):
 
     return effort, penalties, fingers
 
+def init_argument_parser():
+    # TODO review usage of mutually exclusive group for evaluation / optimization
+    parser = argparse.ArgumentParser(description='Evaluate keyboard layouts and find optimal ones.')
+    parser.add_argument('--config_file', type=str, default=None, help='filename to give configuration file')
+    parser.add_argument('--layout_file', type=str, default=None, help='filename in which a layout to be evaluated is specified')
+    parser.add_argument('--solver', type=str, default='glpk', help='Solver to user, for available solvers, see pyomo documentation')
+    parser.add_argument('--bigram_threshold', type=float, default=1, help='TODO')
+    parser.add_argument('--input_encoding', type=str, default='utf-8', help='Input encoding.')
+    parser.add_argument('--use_sos_constraints', action='store_true', help='Use SOS-1 constraints in the model')
+    parser.add_argument('--symbols', type=str, default=letters, help='Set of symbols to place in the layout')
+
+    corpus_choice = parser.add_mutually_exclusive_group()
+    corpus_choice.add_argument('--frequency_file', type=str, default=None, help='File containing frequencies for letters and bigrams')
+    corpus_choice.add_argument('--text_file', type=str, default=None, help='Text file for input corpus')
+
+    return parser
 
 # FIXME layout
 LAYOUT = [['q', 'w', 'f', 'p', 'b', 'j', 'l', 'u', 'y', ';'],
     ['a', 'r', 's', 't', 'g', 'k', 'n', 'e', 'i', 'o'],
     ['z', 'x', 'c', 'd', 'v', 'm', 'h', ',', '.', '/']]
 def main():
+    parser = init_argument_parser()
+    args = parser.parse_args()
+
     # FIXME find a good way to handle this gracefully...
-    encoding = 'latin-1'
+    encoding = args.input_encoding
     with open(0, encoding=encoding) as f:
         # default mode is to optimize
         frequencies = analyze_frequencies(f)
