@@ -237,22 +237,21 @@ class ConfigReaderState(Enum):
     READ_EFFORT = 1
     READ_PENALTIES = 2
     READ_FINGERS = 3
-    COMPLETE = 4
 
 EFFORT_LINE = 'effort:'
 PENALTIES_LINE = 'penalties:'
 FINGERS_LINE = 'fingers:'
-TYPE_LINE = 'type:'
-REQUIRED_PENALTIES = 3
+N_EXPECTED_PENALTIES = 3
 
 def read_configuration_file(f_name):
     state = ConfigReaderState.START
-    effort = None
-    penalties = None
-    fingers = None
+    effort = []
+    penalties = []
+    fingers = []
     n_rows = 0
     max_cols = 0
     n_penalties = 0
+    n_finger_rows = 0
 
     # implement as state machine
     with open(f_name) as f:
@@ -266,25 +265,44 @@ def read_configuration_file(f_name):
                     state = ConfigReaderState.READ_EFFORT
                 else:
                     raise Exception('Configuration file incorrect expecting {} at line {}, see specified format for details.'.format(EFFORT_LINE, i))
+
             elif state == ConfigReaderState.READ_EFFORT:
                 if line == PENALTIES_LINE:
                     state = ConfigReaderState.READ_PENALTIES
                 else:
-                    pass
+                    row = list(map(float, line.split()))
+                    max_cols = max(max_cols, len(row))
+                    effort.append(row)
+                    n_rows += 1
+
             elif state == ConfigReaderState.READ_PENALTIES:
                 if line == FINGERS_LINE:
+                    if n_penalties != N_EXPECTED_PENALTIES:
+                        raise Exception('Configuration file incorrect in line {}. Expecting exactly {} different penalties.'.format(line, N_EXPECTED_PENALTIES).format(i, N_EXPECTED_PENALTIES))
                     state = ConfigReaderState.READ_FINGERS
                 else:
-                    pass
+                    if n_penalties >= N_EXPECTED_PENALTIES:
+                        raise Exception('Configuration file incorrect in line {}. Expecting exactly {} different penalties.'.format(line, N_EXPECTED_PENALTIES).format(i, N_EXPECTED_PENALTIES))
+                    penalty = list(map(float, line.split()))
+                    if len(penalty) != n_rows:
+                        raise Exception('Configuration file incorrect in line {}. Each penalty line needs to specify a penalty parameter for the number of rows of the layout!.'.format(i))
+                    penalties.append(penalty)
+                    n_penalties += 1
+
             elif state == ConfigReaderState.READ_FINGERS:
-                if line == 'TYPE_LINE':
-                    state = ConfigReaderState.COMPLETE
+                if n_finger_rows == n_rows:
+                    break
                 else:
-                    pass
-            elif state == ConfigReaderState.COMPLETE:
-                break
+                    finger_row = list(map(int, line.split()))
+                    if len(finger_row) != len(effort[n_finger_rows]):
+                        raise Exception('Configuration file incorrect in line {}. The finger assignment table has to have the same layout as the effort table.'.format(i))
+                    fingers.append(finger_row)
+                    n_finger_rows += 1
             else:
                 assert False, 'incorrect state, fatal error'
+
+        if n_finger_rows != n_rows:
+            raise Exception('Configuration file incorrect. The finger assignment table needs to have the same number of rows as the effort table.')
 
     return effort, penalties, fingers
 
