@@ -168,11 +168,19 @@ def add_bigram_penalties(instance, frequencies):
     # returns part of objective
     return objective
 
-def create_instance(frequencies):
+def init_instance(instance):
+    assert hasattr(instance, 'frequencies')
+    assert hasattr(instance, 'letters')
+    assert hasattr(instance, 'effort')
+    assert hasattr(instance, 'keys')
+    assert hasattr(instance, 'finger_index')
+    assert hasattr(instance, 'same_finger_penalties')
+    assert hasattr(instance, 'pinky_ring_penalties')
+    assert hasattr(instance, 'ring_middle_penalties')
+
     matrix_indices = [(i,j) for i in range(len(weights)) for j in range(len(weights[i]))]
     objective = [] # gradually append summands
 
-    p = ConcreteModel()
     p.letters = Set(initialize=letters)
     p.matrix_indices = Set(initialize=matrix_indices)
 
@@ -201,13 +209,10 @@ def create_instance(frequencies):
     p.objective = Objective(rule=objective_rule)
     return p
 
-def calculate_objective_value(frequencies, layout):
-    instance = create_instance(frequencies)
-
+def fix_layout(instance, layout):
     def fix_layout_rule(model, i, j):
         return model.v[layout[i][j], (i, j)] == 1
     instance.fix_layout = Constraint(instance.matrix_indices, rule=fix_layout_rule)
-    return instance
 
 def verify_results(instance, layout):
     """Check if bigram penalty variables are correctly set."""
@@ -300,10 +305,16 @@ def init_argument_parser():
 
     return parser
 
-def main():
-    parser = init_argument_parser()
-    args = parser.parse_args()
+def open_with_encoding(f_name, encoding=None):
+    if sys.version_info < (3,):
+        return open(f_name)
+    return open(f_name, encoding=encoding)
 
+def get_keys(effort):
+    # TODO
+    return []
+
+def get_frequencies(args):
     f_name = None
     if args.text_file is not None:
         f_name = args.text_file
@@ -322,28 +333,50 @@ def main():
 
         frequencies = optimize_frequencies(frequencies, args.bigram_threshold)
 
-        if args.layout_file is not None:
-            layout = read_layout(args.layout_file)
-            # TODO verify layout fits possible layout
-            instance = calculate_objective_value(frequencies, layout)
-        else:
-            instance = create_instance(frequencies)
+    return frequencies
 
-        opt = SolverFactory(args.solver)
-        results = opt.solve(instance)
-        print(results)
+def init_params(instance, args):
+    # TODO evaluate usage of pyomo Set / Param
+    if args.config_file is not None:
+        effort, penalties, fingers = read_configuration_file(args.config_file)
+    else:
+        effort = weights
+        penalties = [same_finger_penalties, pinky_ring_penalties, ring_middle_penalties]
+        fingers = finger_index
 
-        layout = [[None for j in range(len(weights[i]))] for i in range(len(weights))]
+    instance.frequencies = get_frequencies(args)
+    instance.symbols = args.symbols
+    instance.effort = effort
+    instance.same_finger_penalties = penalties[0]
+    instance.pinky_ring_penalties = penalties[1]
+    instance.ring_middle_penalties = penalties[2]
+    instance.fingers = fingers
 
-        for l in instance.letters:
-            for i,j in instance.matrix_indices:
-                if instance.v[l, (i,j)]:
-                    layout[i][j] = l
+def main():
+    parser = init_argument_parser()
+    args = parser.parse_args()
 
-        for l in layout:
-            print(l)
+    instance = ConcreteModel()
+    init_params(instance, args)
+    init_instance(instance)
+    if args.layout_file is not None:
+        layout = read_layout(args.layout_file)
+        # TODO verify if layout fits possible layout
+        fix_layout(instance, layout)
 
-        return
+    opt = SolverFactory(args.solver)
+    results = opt.solve(instance)
+    print(results)
+
+    layout = [[None for j in range(len(weights[i]))] for i in range(len(weights))]
+
+    for l in instance.letters:
+        for i,j in instance.matrix_indices:
+            if instance.v[l, (i,j)]:
+                layout[i][j] = l
+
+    for l in layout:
+        print(l)
 
 if __name__ == "__main__":
     main()
