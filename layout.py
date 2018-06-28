@@ -27,15 +27,46 @@ pinky_ring_penalties = {0: 0.5, 1: 1.0, 2: 1.5}
 ring_middle_penalties = {0: 0.1, 1: 0.2, 2: 0.3}
 
 bigram_threshold = 1 # use only the major percentage of bigrams
-def map_char(c):
-    c = c.lower()
-    return c
 
 # TODO
 def optimize_frequencies(frequencies, bigram_threshold):
+    """
+    Drop certain bigrams from the frequency dict. Keep only bigrams whose frequencies
+    sum up to at least bigram_threshold. Bigrams with higher frequency will be kept
+    first.
+    This can be used to use only the most relevant bigrams that make up a certain percentage
+    of all bigrams.
+
+    Args:
+        frequencies (dict): Contains frequencies of bigrams, assumed to be a partition of 1.
+        bigram_threshold (float): 0 <= bigram_threshold <= 1.
+
+    Example:
+        We want to have only the bigrams with the highest frequency that make up
+        80% of the bigrams overall:
+
+        frequencies = {'aa': 0.3, 'bb': 0.3, 'cc': 0.2, 'dd': 0.1, 'ee': 0.1'}
+        bigram_threshold = 0.8
+
+        optimize_frequencies(frequencies, bigram_threshold) == {'aa': 0.3, 'bb': 0.3, 'cc': 0.2}
+    """
+    # TODO implement
     return frequencies
 
 def analyze_frequencies(f):
+    """
+    Count relative frequencies of single characters and bigrams in the given file.
+    Skip any character or bigram containing a symbol that is not given via the parameters.
+
+    Args:
+        f: A file.
+        letters: A collection of relevant symbols.
+
+    Returns:
+        A dictionary, containing all relative frequencies (float <= 1) of characters
+        and bigrams found in the file. Any character or bigram not given via the
+        letters parameter will be filtered out.
+    """
     _letters = set(letters)
     frequencies = {}
     bigram = ""
@@ -43,7 +74,7 @@ def analyze_frequencies(f):
     bigram_total = 0
     for line in f:
         for c in line:
-            c = map_char(c)
+            c = c.lower()
             if len(bigram) == 0:
                 bigram = c
             elif len(bigram) == 1:
@@ -78,6 +109,23 @@ def analyze_frequencies(f):
     return result
 
 def read_layout(f_name):
+    """
+    Read a layout (symbols assigned to key positions) from a file.
+
+    Args:
+        f_name (str): File name of the layout.
+
+    Returns:
+        The symbols accumulated in a list of lists representing the key placement.
+
+    Example:
+        The layout file might look like this:
+            a b c
+            d e f g
+            h i j
+
+        This function returns [['a', 'b', 'c'], ['d', 'e', 'f', 'g'], ['h', 'i', 'j']].
+    """
     layout = []
 
     with open(f_name) as f:
@@ -88,6 +136,14 @@ def read_layout(f_name):
     return layout
 
 def print_instance(letters, weights, frequencies):
+    """
+    Print relevant parameters used to assemble the instance.
+
+    Args:
+        letters: Collection of symbols assigned.
+        weights: Weights for each key position, as list of lists.
+        frequencies: Dictionary containing the frequencies of characters and bigrams.
+    """
     print("weights:")
     for l in weights:
         print(l)
@@ -95,7 +151,17 @@ def print_instance(letters, weights, frequencies):
     for l in frequencies:
         print("{} {}".format(l, frequencies[l]))
 
+# TODO extend doc
 def _get_bigram_indices(finger_1, finger_2, bigrams):
+    """
+    Return list of all pairs of indices of a bigram using finger_1 and finger_2.
+
+    Args:
+        finger_1 (enum): 
+        finger_2 (enum):
+        bigrams: Set of all relevant bigrams.
+    """
+
     finger_map = create_finger_map(finger_index)
     seen = set()
     indices = []
@@ -110,6 +176,17 @@ def _get_bigram_indices(finger_1, finger_2, bigrams):
     return indices
 
 def _add_bigram_penalty(instance, finger_1, finger_2, bigrams, penalties, frequencies):
+    """
+    Add constraints for bigram penalties to problem instance.
+    Args:
+        instance:
+        finger_1:
+        finger_2:
+        bigrams:
+        penalties:
+        frequencies:
+    """
+
     finger_map = create_finger_map(finger_index)
     penalty_index = _get_bigram_indices(finger_1, finger_2, bigrams)
     index_name = "penalty_indices_{}_{}".format(finger_1, finger_2)
@@ -142,6 +219,13 @@ def create_finger_map(finger_index):
     return finger_map
 
 def add_bigram_penalties(instance, frequencies):
+    """
+    Add penalties for bigrams to instance.
+
+    Args:
+        instance: Pyomo model, needs to be initialized via init_instance,
+                  so all relevant variables exist.
+    """
     objective = []
     # only bigrams with 2 different symbols, the others are irrelevant
     bigrams = set(filter(lambda x: len(x) == 2 and x[0] != x[1], frequencies))
@@ -169,6 +253,13 @@ def add_bigram_penalties(instance, frequencies):
     return objective
 
 def init_instance(instance):
+    """
+    Initialize basic constraints and variables for the layout optimization.
+    Mutates instance.
+
+    Args:
+        instance: Pyomo model, needs to have certain parameters set.
+    """
     assert hasattr(instance, 'frequencies')
     assert hasattr(instance, 'letters')
     assert hasattr(instance, 'effort')
@@ -209,6 +300,16 @@ def init_instance(instance):
     return p
 
 def fix_layout(instance, layout):
+    """
+    Fix model parameters so that each symbol is assigned to its respective key
+    given via the layout. As a consequence solving the instance will yield the
+    objective value of the given layout.
+
+    Args:
+        instance: Pyomo model.
+        layout: The keyboard layout
+    """
+
     def fix_layout_rule(model, i, j):
         return model.v[layout[i][j], (i, j)] == 1
     instance.fix_layout = Constraint(instance.matrix_indices, rule=fix_layout_rule)
@@ -243,6 +344,19 @@ FINGERS_LINE = 'fingers:'
 N_EXPECTED_PENALTIES = 3
 
 def read_configuration_file(f_name):
+    """
+    Read config parameters from a file.
+
+    Args:
+        f_name (str): File name of configuration.
+
+    Returns:
+        A tuple containing the effort table, bigram penalties and finger assignment.
+
+    Example:
+        TODO
+    """
+
     state = ConfigReaderState.START
     effort = []
     penalties = []
@@ -306,6 +420,21 @@ def read_configuration_file(f_name):
     return effort, penalties, fingers
 
 def init_argument_parser():
+    """
+    Initialize an argparse.ArgumentParser instance for this program.
+
+    Returns:
+        An argument parser with the arguments
+        congig_file
+        layout_file
+        solver
+        bigram_threshold
+        input_encoding
+        symbols
+        frequency_file
+        text_file
+    """
+
     # TODO review usage of mutually exclusive group for evaluation / optimization
     parser = argparse.ArgumentParser(description='Evaluate keyboard layouts and find optimal ones.')
     parser.add_argument('--config_file', type=str, default=None, help='filename to give configuration file')
@@ -322,6 +451,18 @@ def init_argument_parser():
     return parser
 
 def open_with_encoding(f_name, encoding=None):
+    """
+    Wrap the built-in open function, so we can use the same code for py2 & py3.
+    Attention: in python 2 the encoding parameter is dropped and has no effect
+
+    Args:
+        f_name (str): File name
+        encoding: Name of encoding to use, has no effect in py2
+
+    Returns:
+        A file
+    """
+
     if sys.version_info < (3,):
         return open(f_name)
     return open(f_name, encoding=encoding)
@@ -331,6 +472,12 @@ def get_keys(effort):
     return []
 
 def get_frequencies(args):
+    """
+    Get frequencies from input source specified via command line arguments.
+    
+    Args:
+        args: should match the result of init_argument_parser().parse_arguments()
+    """
     f_name = None
     if args.text_file is not None:
         f_name = args.text_file
@@ -352,6 +499,15 @@ def get_frequencies(args):
     return frequencies
 
 def init_params(instance, args):
+    """
+    Set all relevant parameters as attributes of the optimization instance.
+    Instance is mutated. Call this before calling init_instance!
+
+    Args:
+        instance: Pyomo model
+        args: command line arguments
+    """
+
     # TODO evaluate usage of pyomo Set / Param
     if args.config_file is not None:
         effort, penalties, fingers = read_configuration_file(args.config_file)
@@ -369,6 +525,10 @@ def init_params(instance, args):
     instance.fingers = fingers
 
 def main():
+    """
+    Execute optimization routine.
+    """
+
     parser = init_argument_parser()
     args = parser.parse_args()
 
