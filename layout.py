@@ -186,7 +186,6 @@ def init_instance(instance):
 
     p.v = Var(p.letters, p.matrix_indices, domain=Binary)
 
-    # FIXME maybe add sos-1 constraint
     def need_key(model, l):
         return sum(model.v[l,i] for i in model.matrix_indices) == 1
     p.need_key = Constraint(p.letters, rule=need_key)
@@ -314,7 +313,6 @@ def init_argument_parser():
     parser.add_argument('--solver', type=str, default='glpk', help='Solver to user, for available solvers, see pyomo documentation')
     parser.add_argument('--bigram_threshold', type=float, default=1, help='TODO')
     parser.add_argument('--input_encoding', type=str, default='utf-8', help='Input encoding.')
-    parser.add_argument('--use_sos_constraints', action='store_true', help='Use SOS-1 constraints in the model')
     parser.add_argument('--symbols', type=str, default=letters, help='Set of symbols to place in the layout')
 
     corpus_choice = parser.add_mutually_exclusive_group()
